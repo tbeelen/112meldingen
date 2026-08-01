@@ -190,7 +190,19 @@
 
   function fmtTijd(iso){
     const d = new Date(iso);
-    return d.toLocaleTimeString('nl-NL', { hour:'2-digit', minute:'2-digit' });
+    return d.toLocaleTimeString('nl-NL', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Amsterdam' });
+  }
+
+  function fmtDatum(iso){
+    const d = new Date(iso);
+    const vandaag = new Date();
+    const isVandaag = d.toLocaleDateString('nl-NL', { timeZone:'Europe/Amsterdam' }) === vandaag.toLocaleDateString('nl-NL', { timeZone:'Europe/Amsterdam' });
+    if (isVandaag) return 'Vandaag';
+    return d.toLocaleDateString('nl-NL', { day:'numeric', month:'short', timeZone:'Europe/Amsterdam' });
+  }
+
+  function fmtDatumTijd(iso){
+    return `${fmtDatum(iso)} ${fmtTijd(iso)}`;
   }
 
   function render(data){
@@ -224,7 +236,7 @@
           <div class="bar" style="background:${m.kleur}"></div>
           <div class="content">
             <div class="meta">
-              <span>${fmtTijd(m.tijd)}${m.plaats ? ' &middot; ' + m.plaats : (m.regioNaam ? ' &middot; ' + m.regioNaam : '')}${m.straat ? ', ' + m.straat : ''}</span>
+              <span>${fmtDatumTijd(m.tijd)}${m.plaats ? ' &middot; ' + m.plaats : (m.regioNaam ? ' &middot; ' + m.regioNaam : '')}${m.straat ? ', ' + m.straat : ''}</span>
               ${m.spoed ? `<span>${m.spoed}</span>` : ''}
             </div>
             <div>
@@ -245,7 +257,7 @@
         radius: 7, color: m.kleur, fillColor: m.kleur, fillOpacity: 0.8, weight: 2,
       }).bindPopup(`
         <b>${m.disciplineLabel}</b>${m.spoed ? ' &middot; ' + m.spoed : ''}<br/>
-        ${fmtTijd(m.tijd)} &middot; ${m.plaats || ''}${m.straat ? ', ' + m.straat : ''}<br/>
+        ${fmtDatumTijd(m.tijd)} &middot; ${m.plaats || ''}${m.straat ? ', ' + m.straat : ''}<br/>
         <span style="font-size:12px">${m.tekst}</span>
       `);
       markers.addLayer(marker);

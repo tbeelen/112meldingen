@@ -1,14 +1,14 @@
 // P2000-dashboard backend
 // -------------------------------------------------------------
-// Haalt periodiek meldingen op van feeds.livep2000.nl (de publieke
-// RSS-feed van het P2000-pagernetwerk dat door brandweer, ambulance,
-// politie en KNRM wordt gebruikt), parst ze naar een vast formaat, en
-// serveert ze als JSON via /api/meldingen. Serveert ook de frontend.
+// Haalt periodiek meldingen op van de RSS-feeds van 112-nu.nl (per hulpdienst:
+// brandweer, ambulance, politie, traumaheli, KNRM, weg), parst ze naar een
+// vast formaat, en serveert ze als JSON via /api/meldingen. Serveert ook de
+// frontend.
 //
-// LET OP: er bestaat geen officiele publieke "112-API". Dit gebruikt
-// de bekende hobby-/doorstuurfeed van P2000. Gebruik is doorgaans
-// alleen toegestaan voor persoonlijk/niet-commercieel gebruik -
-// controleer de voorwaarden van de bron en respecteer die.
+// LET OP: er bestaat geen officiele publieke "112-API". Dit gebruikt de
+// publieke P2000-doorstuurfeeds van 112-nu.nl. Gebruik is toegestaan mits een
+// zichtbare link naar 112-nu.nl aanwezig blijft (zie de footer van
+// public/index.html) en binnen hun fair-use beleid.
 // -------------------------------------------------------------
 
 const express = require('express');
@@ -17,6 +17,13 @@ const Parser = require('rss-parser');
 const path = require('path');
 const CITIES = require('./cities');
 const REGIOS = require('./regios');
+
+// Sommige RSS-bronnen (waaronder deze) geven tijden soms door zonder correcte
+// tijdzone-informatie, waardoor alles consequent een vast aantal uren verschilt
+// van de werkelijke tijd. Zie je dat (bijv. steeds precies 2 uur verschil,
+// zelfs nadat de frontend al expliciet op Europe/Amsterdam is gezet), zet dit
+// dan op het aantal uren dat gecorrigeerd moet worden (bijv. -2 of 2).
+const PUBDATE_CORRECTIE_UUR = 0;
 
 const app = express();
 const parser = new Parser();
@@ -105,10 +112,14 @@ async function fetchDiscipline(key, config) {
       const coords = info?.plaatsSlug ? vindCoords(info.plaatsSlug) : null;
       const tekst = item.title || item.contentSnippet || '(geen tekst beschikbaar)';
       const regioNaam = coords ? vindRegio(coords[0], coords[1]) : null;
+      let tijd = item.pubDate ? new Date(item.pubDate) : new Date();
+      if (PUBDATE_CORRECTIE_UUR !== 0) {
+        tijd = new Date(tijd.getTime() + PUBDATE_CORRECTIE_UUR * 60 * 60 * 1000);
+      }
 
       return {
         id: item.guid || item.link || `${key}-${item.pubDate}-${tekst.slice(0, 20)}`,
-        tijd: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
+        tijd: tijd.toISOString(),
         tekst,
         plaats,
         straat,
