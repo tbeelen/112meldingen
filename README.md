@@ -27,6 +27,17 @@ hulpdiensten (brandweer, ambulance, politie, KNRM), gebaseerd op het **P2000-net
 - De "spoed"-aanduiding (spoed / grote spoed / zeer grote spoed / geen spoed)
   wordt ook uit de URL-slug gehaald. Werkt dit een keer niet zoals verwacht,
   kijk dan naar `parseSpoed()` in `server/server.js`.
+- **Regiofilter**: 112-nu.nl biedt geen bevestigde losse RSS-feed per
+  veiligheidsregio, dus de server bepaalt zelf de regio: op basis van de
+  coördinaten van de herkende plaats wordt de dichtstbijzijnde van de 25
+  veiligheidsregio's gekozen (`server/regios.js`). Dit is een benadering op
+  basis van afstand tot het midden van elke regio, geen exacte
+  gemeentegrens-opzoeking &mdash; in grensgevallen kan een plaats dus aan de
+  net verkeerde regio worden toegekend.
+- **Mobiel gebruik**: het dashboard is responsive; op smalle schermen komt de
+  kaart boven de lijst te staan. Voor eigen, niet-openbaar gebruik volstaat dit
+  prima. Een aparte native app is pas de moeite waard als je iets wilt dat een
+  website niet kan, zoals push-meldingen bij nieuwe incidenten.
 
 ## Installeren en draaien
 
@@ -76,6 +87,7 @@ p2000-dashboard/
 └── server/
     ├── server.js         Express-app: haalt de feeds op, parst, serveert JSON + frontend
     ├── cities.js           Woordenboek plaatsnaam → coördinaten
+    ├── regios.js           De 25 veiligheidsregio's, gebruikt om een regio af te leiden
     ├── package.json
     └── public/
         └── index.html      Het dashboard (kaart, ticker, lijst, filters)

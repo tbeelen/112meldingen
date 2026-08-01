@@ -15,8 +15,6 @@
     --hairline:#22303f;
     --text-primary:#e7edf3;
     --text-muted:#7c8ba0;
-    --led-bg:#05080a;
-    --led-amber:#ffb020;
     --brandweer:#e8462f;
     --ambulance:#8bc63e;
     --politie:#3f7fe8;
@@ -29,54 +27,6 @@
   *{box-sizing:border-box;}
   html,body{margin:0;height:100%;background:var(--bg-base);color:var(--text-primary);font-family:var(--font-sans);}
   #app{display:flex;flex-direction:column;height:100vh;}
-
-  /* ---- LED ticker (signature element) ---- */
-  .ticker-wrap{
-    background:var(--led-bg);
-    border-bottom:2px solid #000;
-    overflow:hidden;
-    white-space:nowrap;
-    height:38px;
-    display:flex;
-    align-items:center;
-    flex-shrink:0;
-    box-shadow: inset 0 0 12px rgba(255,176,32,0.08);
-  }
-  .ticker-label{
-    background:#000;
-    color:var(--led-amber);
-    font-family:var(--font-mono);
-    font-weight:700;
-    font-size:12px;
-    letter-spacing:0.12em;
-    padding:0 14px;
-    height:100%;
-    display:flex;
-    align-items:center;
-    flex-shrink:0;
-    border-right:1px solid #1a1a1a;
-  }
-  .ticker-track{
-    display:inline-flex;
-    align-items:center;
-    animation: scroll-left 45s linear infinite;
-    padding-left:100%;
-  }
-  .ticker-track span{
-    font-family:var(--font-mono);
-    color:var(--led-amber);
-    font-size:13px;
-    letter-spacing:0.03em;
-    padding-right:60px;
-    text-shadow:0 0 6px rgba(255,176,32,0.55);
-  }
-  @keyframes scroll-left{
-    from{ transform:translateX(0); }
-    to{ transform:translateX(-100%); }
-  }
-  @media (prefers-reduced-motion: reduce){
-    .ticker-track{ animation:none; }
-  }
 
   /* ---- header ---- */
   header{
@@ -154,15 +104,32 @@
   ::-webkit-scrollbar{width:8px;}
   ::-webkit-scrollbar-track{background:var(--bg-panel);}
   ::-webkit-scrollbar-thumb{background:var(--hairline);border-radius:4px;}
+
+  /* ---- responsive: mobiel ---- */
+  @media (max-width: 768px){
+    .brand h1{font-size:15px;}
+    .brand .sub{display:none;}
+    header{padding:10px 14px;}
+    .filters{padding:8px 14px;gap:6px;}
+    .chip{padding:5px 9px;font-size:11px;}
+    select, input[type=text]{font-size:12px;padding:6px 8px;flex:1 1 auto;}
+    input[type=text]{min-width:0;}
+    select{min-width:0;max-width:40%;}
+
+    main{flex-direction:column;}
+    #map{flex:0 0 42vh;min-height:220px;}
+    .list-panel{flex:1;max-width:100%;min-width:0;border-left:none;border-top:1px solid var(--hairline);}
+    .item{padding:10px 14px;}
+    footer{font-size:10px;padding:6px 14px;}
+  }
+  @media (max-width: 420px){
+    .chip{padding:5px 7px;}
+    select{max-width:34%;}
+  }
 </style>
 </head>
 <body>
 <div id="app">
-
-  <div class="ticker-wrap">
-    <div class="ticker-label">&#9679; LIVE</div>
-    <div class="ticker-track" id="ticker"><span>Verbinden met feed&hellip;</span></div>
-  </div>
 
   <header>
     <div class="brand">
@@ -182,6 +149,7 @@
     <button class="chip active" data-d="traumaheli"><span class="dot" style="background:var(--traumaheli)"></span>Traumaheli</button>
     <button class="chip active" data-d="knrm"><span class="dot" style="background:var(--knrm)"></span>KNRM</button>
     <button class="chip active" data-d="weg"><span class="dot" style="background:var(--weg)"></span>Weg</button>
+    <select id="regioSelect"><option value="">Alle regio's</option></select>
     <input type="text" id="zoekInput" placeholder="Zoek op plaats of tekst&hellip;" />
   </div>
 
@@ -205,8 +173,10 @@
 
   const state = {
     disciplines: new Set(['brandweer','ambulance','politie','traumaheli','knrm','weg']),
+    regio: '',
     zoek: '',
     meldingen: [],
+    zichtbaar: [],
   };
 
   const map = L.map('map', { zoomControl: true }).setView([52.2, 5.6], 7);
@@ -216,6 +186,7 @@
   }).addTo(map);
 
   let markers = L.layerGroup().addTo(map);
+  let markersByIdx = new Map();
 
   function fmtTijd(iso){
     const d = new Date(iso);
@@ -223,11 +194,23 @@
   }
 
   function render(data){
+    const select = document.getElementById('regioSelect');
+    if (select.options.length <= 1 && data.regios){
+      data.regios.forEach(naam => {
+        const opt = document.createElement('option');
+        opt.value = naam; opt.textContent = naam;
+        select.appendChild(opt);
+      });
+    }
+
     let items = data.meldingen.filter(m => state.disciplines.has(m.discipline));
+    if (state.regio) items = items.filter(m => m.regioNaam === state.regio);
     if (state.zoek) {
       const q = state.zoek.toLowerCase();
       items = items.filter(m => m.tekst.toLowerCase().includes(q) || (m.plaats||'').toLowerCase().includes(q));
     }
+
+    state.zichtbaar = items; // voor de klik-op-lijst-item -> ga naar kaart koppeling
 
     document.getElementById('listCount').textContent = `${items.length} melding${items.length===1?'':'en'}`;
 
@@ -236,12 +219,12 @@
     if (items.length === 0){
       list.innerHTML = '<div class="empty-state">Geen meldingen die aan de filters voldoen.</div>';
     } else {
-      list.innerHTML = items.slice(0, 200).map(m => `
-        <a class="item" href="${m.link || '#'}" target="_blank" rel="noopener" data-lat="${m.lat}" data-lon="${m.lon}">
+      list.innerHTML = items.slice(0, 200).map((m, idx) => `
+        <div class="item" data-idx="${idx}" tabindex="0" role="button">
           <div class="bar" style="background:${m.kleur}"></div>
           <div class="content">
             <div class="meta">
-              <span>${fmtTijd(m.tijd)}${m.plaats ? ' &middot; ' + m.plaats : ''}${m.straat ? ', ' + m.straat : ''}</span>
+              <span>${fmtTijd(m.tijd)}${m.plaats ? ' &middot; ' + m.plaats : (m.regioNaam ? ' &middot; ' + m.regioNaam : '')}${m.straat ? ', ' + m.straat : ''}</span>
               ${m.spoed ? `<span>${m.spoed}</span>` : ''}
             </div>
             <div>
@@ -249,13 +232,15 @@
             </div>
             <div class="tekst">${m.tekst}</div>
           </div>
-        </a>
+        </div>
       `).join('');
     }
 
     // kaart: alleen meldingen tonen waarvan we een plaats konden koppelen aan coördinaten
     markers.clearLayers();
-    items.filter(m => m.lat != null && m.lon != null).forEach(m => {
+    markersByIdx.clear();
+    items.forEach((m, idx) => {
+      if (m.lat == null || m.lon == null) return;
       const marker = L.circleMarker([m.lat, m.lon], {
         radius: 7, color: m.kleur, fillColor: m.kleur, fillOpacity: 0.8, weight: 2,
       }).bindPopup(`
@@ -264,29 +249,22 @@
         <span style="font-size:12px">${m.tekst}</span>
       `);
       markers.addLayer(marker);
+      markersByIdx.set(idx, marker);
     });
-
-    // ticker: laatste 15 meldingen aaneengeregen
-    const tickerItems = data.meldingen.slice(0, 15);
-    const ticker = document.getElementById('ticker');
-    if (tickerItems.length){
-      ticker.innerHTML = tickerItems.map(m =>
-        `<span>${fmtTijd(m.tijd)} ${m.disciplineLabel.toUpperCase()} ${m.plaats ? m.plaats.toUpperCase()+' &mdash; ' : ''}${m.tekst}</span>`
-      ).join('');
-    }
   }
 
   async function ophalen(){
     try {
       const params = new URLSearchParams();
       params.set('discipline', Array.from(state.disciplines).join(','));
+      if (state.regio) params.set('regio', state.regio);
       if (state.zoek) params.set('zoek', state.zoek);
 
       const res = await fetch(`${API_BASE}/api/meldingen?${params.toString()}`);
       if (!res.ok) throw new Error('Serverfout: ' + res.status);
       const data = await res.json();
       render(data);
-      document.getElementById('statusText').textContent = 'live &middot; laatst bijgewerkt ' + fmtTijd(data.laatsteUpdate);
+      document.getElementById('statusText').textContent = 'live \u00B7 laatst bijgewerkt ' + fmtTijd(data.laatsteUpdate);
       document.getElementById('liveDot').style.background = 'var(--ambulance)';
     } catch(err){
       document.getElementById('statusText').textContent = 'geen verbinding met backend';
@@ -294,6 +272,24 @@
       console.error(err);
     }
   }
+
+  document.getElementById('list').addEventListener('click', e => {
+    const el = e.target.closest('.item');
+    if (!el) return;
+    const idx = Number(el.dataset.idx);
+    const melding = state.zichtbaar[idx];
+    if (!melding) return;
+    if (melding.lat == null || melding.lon == null) return; // geen locatie bekend, niets te tonen op de kaart
+    map.flyTo([melding.lat, melding.lon], Math.max(map.getZoom(), 14), { duration: 0.6 });
+    markersByIdx.get(idx)?.openPopup();
+  });
+  // ook bereikbaar met het toetsenbord (Enter/spatie) omdat items nu geen <a> meer zijn
+  document.getElementById('list').addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      const el = e.target.closest('.item');
+      if (el) { e.preventDefault(); el.click(); }
+    }
+  });
 
   document.querySelectorAll('.chip').forEach(chip => {
     chip.addEventListener('click', () => {
@@ -303,6 +299,7 @@
       ophalen();
     });
   });
+  document.getElementById('regioSelect').addEventListener('change', e => { state.regio = e.target.value; ophalen(); });
   let zoekTimeout;
   document.getElementById('zoekInput').addEventListener('input', e => {
     clearTimeout(zoekTimeout);

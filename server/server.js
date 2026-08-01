@@ -16,6 +16,7 @@ const cors = require('cors');
 const Parser = require('rss-parser');
 const path = require('path');
 const CITIES = require('./cities');
+const REGIOS = require('./regios');
 
 const app = express();
 const parser = new Parser();
@@ -82,6 +83,17 @@ function vindCoords(plaatsSlug) {
   return hit || null;
 }
 
+function vindRegio(lat, lon) {
+  if (lat == null || lon == null) return null;
+  let beste = null;
+  let kleinsteAfstand = Infinity;
+  for (const regio of REGIOS) {
+    const afstand = Math.hypot(regio.lat - lat, regio.lon - lon);
+    if (afstand < kleinsteAfstand) { kleinsteAfstand = afstand; beste = regio.naam; }
+  }
+  return beste;
+}
+
 async function fetchDiscipline(key, config) {
   try {
     const feed = await parser.parseURL(config.url);
@@ -92,6 +104,7 @@ async function fetchDiscipline(key, config) {
       const spoed = parseSpoed(info?.beschrijvingSlug);
       const coords = info?.plaatsSlug ? vindCoords(info.plaatsSlug) : null;
       const tekst = item.title || item.contentSnippet || '(geen tekst beschikbaar)';
+      const regioNaam = coords ? vindRegio(coords[0], coords[1]) : null;
 
       return {
         id: item.guid || item.link || `${key}-${item.pubDate}-${tekst.slice(0, 20)}`,
@@ -99,6 +112,7 @@ async function fetchDiscipline(key, config) {
         tekst,
         plaats,
         straat,
+        regioNaam,
         discipline: key,
         disciplineLabel: config.label,
         kleur: config.color,
@@ -148,11 +162,15 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/meldingen', (req, res) => {
   let result = buffer;
-  const { discipline, zoek, sinds } = req.query;
+  const { discipline, regio, zoek, sinds } = req.query;
 
   if (discipline) {
     const keys = String(discipline).split(',');
     result = result.filter((m) => keys.includes(m.discipline));
+  }
+  if (regio) {
+    const namen = String(regio).split(',');
+    result = result.filter((m) => m.regioNaam && namen.includes(m.regioNaam));
   }
   if (zoek) {
     const q = String(zoek).toLowerCase();
@@ -169,6 +187,7 @@ app.get('/api/meldingen', (req, res) => {
     aantal: result.length,
     laatsteUpdate: new Date().toISOString(),
     disciplines: DISCIPLINES_PUBLIC,
+    regios: REGIOS.map((r) => r.naam),
     meldingen: result,
   });
 });
