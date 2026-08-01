@@ -23,13 +23,13 @@ const REGIOS = require('./regios');
 // van de werkelijke tijd. Zie je dat (bijv. steeds precies 2 uur verschil,
 // zelfs nadat de frontend al expliciet op Europe/Amsterdam is gezet), zet dit
 // dan op het aantal uren dat gecorrigeerd moet worden (bijv. -2 of 2).
-const PUBDATE_CORRECTIE_UUR = 0;
+const PUBDATE_CORRECTIE_UUR = -2;
 
 const app = express();
 const parser = new Parser();
 const PORT = process.env.PORT || 3000;
 const POLL_INTERVAL_MS = 30_000; // elke 30 sec verversen (respecteer fair-use van de bron)
-const MAX_BUFFER = 500; // aantal meldingen dat we in het geheugen bewaren
+const MAX_BUFFER = 6000; // genoeg voor ~24u aan landelijke meldingen over alle disciplines
 
 // 112-nu.nl biedt losse RSS-feeds per hulpdienst (zie https://112-nu.nl/rss.html).
 // Gebruik toegestaan mits minimaal 1 zichtbare link naar 112-nu.nl op de pagina

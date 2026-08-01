@@ -69,7 +69,15 @@
 
   /* ---- main layout ---- */
   main{flex:1;display:flex;min-height:0;}
-  #map{flex:1 1 60%;background:#0a0d11;}
+  #map{flex:1 1 60%;background:#0a0d11;position:relative;}
+  #overzichtBtn{
+    position:absolute;top:12px;right:12px;z-index:500;
+    background:var(--bg-panel);color:var(--text-primary);
+    border:1px solid var(--hairline);border-radius:4px;
+    font-family:var(--font-sans);font-size:12px;font-weight:600;
+    padding:7px 12px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);
+  }
+  #overzichtBtn:hover{background:var(--bg-panel-2);}
   .list-panel{
     flex:1 1 40%;max-width:440px;min-width:320px;
     border-left:1px solid var(--hairline);background:var(--bg-panel);
@@ -150,11 +158,20 @@
     <button class="chip active" data-d="knrm"><span class="dot" style="background:var(--knrm)"></span>KNRM</button>
     <button class="chip active" data-d="weg"><span class="dot" style="background:var(--weg)"></span>Weg</button>
     <select id="regioSelect"><option value="">Alle regio's</option></select>
+    <select id="tijdvensterSelect">
+      <option value="1">Laatste uur</option>
+      <option value="4" selected>Laatste 4 uur</option>
+      <option value="8">Laatste 8 uur</option>
+      <option value="12">Laatste 12 uur</option>
+      <option value="24">Laatste 24 uur</option>
+    </select>
     <input type="text" id="zoekInput" placeholder="Zoek op plaats of tekst&hellip;" />
   </div>
 
   <main>
-    <div id="map"></div>
+    <div id="map">
+      <button id="overzichtBtn" title="Terug naar overzicht Nederland">&#8634; Overzicht NL</button>
+    </div>
     <div class="list-panel">
       <div class="count" id="listCount">0 meldingen</div>
       <div class="list" id="list"></div>
@@ -175,11 +192,13 @@
     disciplines: new Set(['brandweer','ambulance','politie','traumaheli','knrm','weg']),
     regio: '',
     zoek: '',
+    tijdvensterUur: 4,
     meldingen: [],
     zichtbaar: [],
   };
+  const NL_OVERZICHT = { center: [52.2, 5.6], zoom: 7 };
 
-  const map = L.map('map', { zoomControl: true }).setView([52.2, 5.6], 7);
+  const map = L.map('map', { zoomControl: true }).setView(NL_OVERZICHT.center, NL_OVERZICHT.zoom);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; OpenStreetMap &copy; CARTO',
     subdomains: 'abcd', maxZoom: 19,
@@ -195,9 +214,6 @@
 
   function fmtDatum(iso){
     const d = new Date(iso);
-    const vandaag = new Date();
-    const isVandaag = d.toLocaleDateString('nl-NL', { timeZone:'Europe/Amsterdam' }) === vandaag.toLocaleDateString('nl-NL', { timeZone:'Europe/Amsterdam' });
-    if (isVandaag) return 'Vandaag';
     return d.toLocaleDateString('nl-NL', { day:'numeric', month:'short', timeZone:'Europe/Amsterdam' });
   }
 
@@ -270,6 +286,8 @@
       const params = new URLSearchParams();
       params.set('discipline', Array.from(state.disciplines).join(','));
       if (state.regio) params.set('regio', state.regio);
+      const sinds = new Date(Date.now() - state.tijdvensterUur * 60 * 60 * 1000);
+      params.set('sinds', sinds.toISOString());
       if (state.zoek) params.set('zoek', state.zoek);
 
       const res = await fetch(`${API_BASE}/api/meldingen?${params.toString()}`);
@@ -312,6 +330,10 @@
     });
   });
   document.getElementById('regioSelect').addEventListener('change', e => { state.regio = e.target.value; ophalen(); });
+  document.getElementById('tijdvensterSelect').addEventListener('change', e => { state.tijdvensterUur = Number(e.target.value); ophalen(); });
+  document.getElementById('overzichtBtn').addEventListener('click', () => {
+    map.flyTo(NL_OVERZICHT.center, NL_OVERZICHT.zoom, { duration: 0.6 });
+  });
   let zoekTimeout;
   document.getElementById('zoekInput').addEventListener('input', e => {
     clearTimeout(zoekTimeout);
