@@ -169,7 +169,14 @@ const DISCIPLINES_PUBLIC = Object.fromEntries(
 );
 
 app.use(cors());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: false,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-store');
+    }
+  },
+}));
 
 app.get('/api/meldingen', (req, res) => {
   let result = buffer;
