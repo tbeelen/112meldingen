@@ -7,21 +7,26 @@ hulpdiensten (brandweer, ambulance, politie, KNRM), gebaseerd op het **P2000-net
 
 - Er bestaat geen officiële, publieke "112-API". Wat wél publiek beschikbaar is,
   is het **P2000-pagernetwerk**: het systeem waarmee meldkamers hulpdiensten
-  oproepen. Dit project gebruikt de bekende hobbyfeed `feeds.livep2000.nl` die
-  door meerdere Nederlandse P2000-projecten wordt gebruikt.
-- Deze feed is bedoeld voor **persoonlijk, niet-commercieel gebruik**. Check dat
-  zelf nog even en respecteer de voorwaarden van de bron.
-- Een browser kan zo'n feed meestal niet rechtstreeks ophalen (CORS). Daarom
-  bestaat dit project uit twee delen: een **backend** die de feed ophaalt en
-  omzet naar JSON, en een **frontend** (het dashboard) die daarmee praat.
-- Berichten bevatten meestal geen exacte coördinaten, alleen een plaatsnaam.
-  De backend herkent plaatsnamen uit een woordenboek (`server/cities.js`) en
-  valt terug op het midden van de regio als een plaats niet herkend wordt.
-  Vul die lijst gerust aan met plaatsen uit jouw eigen regio.
-- Het herkennen van het type hulpdienst en de prioriteit (A1/A2/P1&hellip;) gebeurt
-  met simpele patroonherkenning in de berichttekst. Zodra je de app live hebt
-  draaien zie je de echte berichtformattering en kun je `detectDiscipline` en
-  `detectPrioriteit` in `server/server.js` verfijnen.
+  oproepen. Dit project gebruikt de RSS-feeds van **[112-nu.nl](https://112-nu.nl/rss.html)**
+  per hulpdienst (brandweer, ambulance, politie, traumaheli, KNRM, weg).
+  Een eerdere bron (`feeds.livep2000.nl`) die dit project gebruikte, bleek niet
+  meer te bestaan &mdash; vandaar de overstap.
+- **Gebruiksvoorwaarden van 112-nu.nl**: hun RSS-inhoud mag op je eigen website
+  gebruikt worden (ook commercieel), **mits er minimaal 1 zichtbare link naar
+  112-nu.nl op de pagina staat** (geen `rel="nofollow"`). Die link staat al in
+  de footer van het dashboard &mdash; verwijder 'm niet. Daarnaast geldt een
+  fair-use beleid: niet bedoeld om grote hoeveelheden data te verzamelen. De
+  backend ververst daarom maar elke 30 seconden, en haalt alleen de 6
+  hoofdfeeds op (niet honderden losse regio-feeds).
+- Berichten bevatten geen exacte coördinaten, maar de melding-URL van 112-nu.nl
+  bevat wel de plaatsnaam (en vaak straatnaam) als onderdeel van het pad, bijv.
+  `112-nu.nl/melding/12345/steenwijk/buitensingel/...`. De backend leest die
+  plaatsnaam uit de URL en koppelt 'm aan coördinaten via een woordenboek
+  (`server/cities.js`). Staat een plaats er niet in, dan verschijnt de melding
+  wél in de lijst maar niet op de kaart. Vul de lijst gerust aan.
+- De "spoed"-aanduiding (spoed / grote spoed / zeer grote spoed / geen spoed)
+  wordt ook uit de URL-slug gehaald. Werkt dit een keer niet zoals verwacht,
+  kijk dan naar `parseSpoed()` in `server/server.js`.
 
 ## Installeren en draaien
 
@@ -53,21 +58,23 @@ Zet de omgevingsvariabele `PORT` als je platform een specifieke poort vereist
 
 ## Aanpassen
 
-- **Filters/kleuren per hulpdienst**: `server/server.js` (object `DISCIPLINES`)
-  en dezelfde kleuren in `client/index.html` (CSS-variabelen).
-- **Regio's**: `server/regios.js`.
+- **Feeds/kleuren per hulpdienst**: `server/server.js` (object `DISCIPLINES`,
+  bevat ook de RSS-URL per dienst) en dezelfde kleuren in
+  `server/public/index.html` (CSS-variabelen).
 - **Plaatsnaam-herkenning**: `server/cities.js` &mdash; voeg plaatsen toe als
-  `'plaatsnaam': [breedtegraad, lengtegraad]`.
+  `'plaatsnaam': [breedtegraad, lengtegraad]`. De sleutel moet overeenkomen met
+  hoe de plaatsnaam in de 112-nu.nl-URL geschreven wordt (kleine letters,
+  spaties/koppeltekens maakt niet uit, dat wordt genormaliseerd).
 - **Ververssnelheid**: `POLL_INTERVAL_MS` in `server/server.js` (backend) en het
-  interval onderaan `client/index.html` (frontend, hoe vaak de pagina de API bevraagt).
+  interval onderaan `server/public/index.html` (frontend, hoe vaak de pagina de
+  API bevraagt). Zet dit niet te laag i.v.m. het fair-use beleid van 112-nu.nl.
 
 ## Projectstructuur
 
 ```
 p2000-dashboard/
 └── server/
-    ├── server.js         Express-app: haalt de feed op, parst, serveert JSON + frontend
-    ├── regios.js          De 25 veiligheidsregio's met middelpunt-coördinaten
+    ├── server.js         Express-app: haalt de feeds op, parst, serveert JSON + frontend
     ├── cities.js           Woordenboek plaatsnaam → coördinaten
     ├── package.json
     └── public/

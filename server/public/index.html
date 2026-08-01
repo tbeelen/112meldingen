@@ -20,7 +20,9 @@
     --brandweer:#e8462f;
     --ambulance:#8bc63e;
     --politie:#3f7fe8;
+    --traumaheli:#c060e8;
     --knrm:#e8a52f;
+    --weg:#4fb8c4;
     --font-mono:'JetBrains Mono', ui-monospace, monospace;
     --font-sans:'IBM Plex Sans', system-ui, sans-serif;
   }
@@ -105,7 +107,9 @@
   .chip[data-d="brandweer"].active{background:var(--brandweer);}
   .chip[data-d="ambulance"].active{background:var(--ambulance);}
   .chip[data-d="politie"].active{background:var(--politie);}
+  .chip[data-d="traumaheli"].active{background:var(--traumaheli);}
   .chip[data-d="knrm"].active{background:var(--knrm);}
+  .chip[data-d="weg"].active{background:var(--weg);}
   select, input[type=text]{
     background:var(--bg-panel);border:1px solid var(--hairline);color:var(--text-primary);
     font-family:var(--font-sans);font-size:13px;padding:7px 10px;border-radius:4px;
@@ -129,6 +133,7 @@
   .item{
     padding:12px 16px;border-bottom:1px solid var(--hairline);
     display:flex;gap:10px;cursor:pointer;transition:background .15s;
+    text-decoration:none;color:inherit;
   }
   .item:hover{background:var(--bg-panel-2);}
   .item .bar{width:4px;border-radius:2px;flex-shrink:0;}
@@ -174,8 +179,9 @@
     <button class="chip active" data-d="brandweer"><span class="dot" style="background:var(--brandweer)"></span>Brandweer</button>
     <button class="chip active" data-d="ambulance"><span class="dot" style="background:var(--ambulance)"></span>Ambulance</button>
     <button class="chip active" data-d="politie"><span class="dot" style="background:var(--politie)"></span>Politie</button>
+    <button class="chip active" data-d="traumaheli"><span class="dot" style="background:var(--traumaheli)"></span>Traumaheli</button>
     <button class="chip active" data-d="knrm"><span class="dot" style="background:var(--knrm)"></span>KNRM</button>
-    <select id="regioSelect"><option value="">Alle regio's</option></select>
+    <button class="chip active" data-d="weg"><span class="dot" style="background:var(--weg)"></span>Weg</button>
     <input type="text" id="zoekInput" placeholder="Zoek op plaats of tekst&hellip;" />
   </div>
 
@@ -188,8 +194,8 @@
   </main>
 
   <footer>
-    Bron: P2000-netwerk (brandweer / ambulance / politie / KNRM) via feeds.livep2000.nl &middot;
-    Alleen voor persoonlijk gebruik &middot; locaties zijn benaderd op basis van plaatsnaam in het bericht
+    Meldingen aangeleverd door <a href="https://112-nu.nl">112-nu.nl</a> &middot;
+    locaties zijn benaderd op basis van de plaatsnaam in het bericht
   </footer>
 </div>
 
@@ -198,8 +204,7 @@
   const API_BASE = ''; // zelfde origin als deze pagina (server.js serveert beide)
 
   const state = {
-    disciplines: new Set(['brandweer','ambulance','politie','knrm']),
-    regio: '',
+    disciplines: new Set(['brandweer','ambulance','politie','traumaheli','knrm','weg']),
     zoek: '',
     meldingen: [],
   };
@@ -218,18 +223,7 @@
   }
 
   function render(data){
-    // regio-select vullen (eenmalig)
-    const select = document.getElementById('regioSelect');
-    if (select.options.length <= 1 && data.regios){
-      data.regios.forEach(r => {
-        const opt = document.createElement('option');
-        opt.value = r.id; opt.textContent = r.naam;
-        select.appendChild(opt);
-      });
-    }
-
     let items = data.meldingen.filter(m => state.disciplines.has(m.discipline));
-    if (state.regio) items = items.filter(m => String(m.regioId) === state.regio);
     if (state.zoek) {
       const q = state.zoek.toLowerCase();
       items = items.filter(m => m.tekst.toLowerCase().includes(q) || (m.plaats||'').toLowerCase().includes(q));
@@ -243,30 +237,30 @@
       list.innerHTML = '<div class="empty-state">Geen meldingen die aan de filters voldoen.</div>';
     } else {
       list.innerHTML = items.slice(0, 200).map(m => `
-        <div class="item" data-lat="${m.lat}" data-lon="${m.lon}">
+        <a class="item" href="${m.link || '#'}" target="_blank" rel="noopener" data-lat="${m.lat}" data-lon="${m.lon}">
           <div class="bar" style="background:${m.kleur}"></div>
           <div class="content">
             <div class="meta">
-              <span>${fmtTijd(m.tijd)} &middot; ${m.regioNaam}${m.plaats ? ' &middot; ' + m.plaats : ''}</span>
-              ${m.prioriteit ? `<span>${m.prioriteit}</span>` : ''}
+              <span>${fmtTijd(m.tijd)}${m.plaats ? ' &middot; ' + m.plaats : ''}${m.straat ? ', ' + m.straat : ''}</span>
+              ${m.spoed ? `<span>${m.spoed}</span>` : ''}
             </div>
             <div>
               <span class="tag" style="background:${m.kleur}22;color:${m.kleur}">${m.disciplineLabel}</span>
             </div>
             <div class="tekst">${m.tekst}</div>
           </div>
-        </div>
+        </a>
       `).join('');
     }
 
-    // kaart
+    // kaart: alleen meldingen tonen waarvan we een plaats konden koppelen aan coördinaten
     markers.clearLayers();
-    items.forEach(m => {
+    items.filter(m => m.lat != null && m.lon != null).forEach(m => {
       const marker = L.circleMarker([m.lat, m.lon], {
         radius: 7, color: m.kleur, fillColor: m.kleur, fillOpacity: 0.8, weight: 2,
       }).bindPopup(`
-        <b>${m.disciplineLabel}</b>${m.prioriteit ? ' &middot; ' + m.prioriteit : ''}<br/>
-        ${fmtTijd(m.tijd)} &middot; ${m.plaats || m.regioNaam}<br/>
+        <b>${m.disciplineLabel}</b>${m.spoed ? ' &middot; ' + m.spoed : ''}<br/>
+        ${fmtTijd(m.tijd)} &middot; ${m.plaats || ''}${m.straat ? ', ' + m.straat : ''}<br/>
         <span style="font-size:12px">${m.tekst}</span>
       `);
       markers.addLayer(marker);
@@ -285,7 +279,6 @@
   async function ophalen(){
     try {
       const params = new URLSearchParams();
-      if (state.regio) params.set('regio', state.regio);
       params.set('discipline', Array.from(state.disciplines).join(','));
       if (state.zoek) params.set('zoek', state.zoek);
 
@@ -310,7 +303,6 @@
       ophalen();
     });
   });
-  document.getElementById('regioSelect').addEventListener('change', e => { state.regio = e.target.value; ophalen(); });
   let zoekTimeout;
   document.getElementById('zoekInput').addEventListener('input', e => {
     clearTimeout(zoekTimeout);
