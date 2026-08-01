@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>112 Meldingen &mdash; live P2000 dashboard</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-base:#0b0f14;
+    --bg-panel:#121821;
+    --bg-panel-2:#0e131b;
+    --hairline:#22303f;
+    --text-primary:#e7edf3;
+    --text-muted:#7c8ba0;
+    --led-bg:#05080a;
+    --led-amber:#ffb020;
+    --brandweer:#e8462f;
+    --ambulance:#8bc63e;
+    --politie:#3f7fe8;
+    --knrm:#e8a52f;
+    --font-mono:'JetBrains Mono', ui-monospace, monospace;
+    --font-sans:'IBM Plex Sans', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--bg-base);color:var(--text-primary);font-family:var(--font-sans);}
+  #app{display:flex;flex-direction:column;height:100vh;}
+
+  /* ---- LED ticker (signature element) ---- */
+  .ticker-wrap{
+    background:var(--led-bg);
+    border-bottom:2px solid #000;
+    overflow:hidden;
+    white-space:nowrap;
+    height:38px;
+    display:flex;
+    align-items:center;
+    flex-shrink:0;
+    box-shadow: inset 0 0 12px rgba(255,176,32,0.08);
+  }
+  .ticker-label{
+    background:#000;
+    color:var(--led-amber);
+    font-family:var(--font-mono);
+    font-weight:700;
+    font-size:12px;
+    letter-spacing:0.12em;
+    padding:0 14px;
+    height:100%;
+    display:flex;
+    align-items:center;
+    flex-shrink:0;
+    border-right:1px solid #1a1a1a;
+  }
+  .ticker-track{
+    display:inline-flex;
+    align-items:center;
+    animation: scroll-left 45s linear infinite;
+    padding-left:100%;
+  }
+  .ticker-track span{
+    font-family:var(--font-mono);
+    color:var(--led-amber);
+    font-size:13px;
+    letter-spacing:0.03em;
+    padding-right:60px;
+    text-shadow:0 0 6px rgba(255,176,32,0.55);
+  }
+  @keyframes scroll-left{
+    from{ transform:translateX(0); }
+    to{ transform:translateX(-100%); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .ticker-track{ animation:none; }
+  }
+
+  /* ---- header ---- */
+  header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 20px;border-bottom:1px solid var(--hairline);
+    background:var(--bg-panel); flex-shrink:0; flex-wrap:wrap; gap:10px;
+  }
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand h1{font-size:17px;margin:0;font-weight:700;letter-spacing:0.01em;}
+  .brand .sub{font-size:12px;color:var(--text-muted);font-family:var(--font-mono);}
+  .live-dot{width:9px;height:9px;border-radius:50%;background:var(--ambulance);box-shadow:0 0 8px var(--ambulance);animation:pulse 1.6s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.35;}}
+  .status{display:flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:12px;color:var(--text-muted);}
+
+  /* ---- filters ---- */
+  .filters{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    padding:10px 20px;border-bottom:1px solid var(--hairline);background:var(--bg-panel-2);flex-shrink:0;
+  }
+  .chip{
+    font-family:var(--font-mono);font-size:12px;font-weight:500;
+    padding:6px 12px;border-radius:4px;border:1px solid var(--hairline);
+    background:transparent;color:var(--text-muted);cursor:pointer;
+    display:flex;align-items:center;gap:6px;transition:all .15s;
+  }
+  .chip .dot{width:8px;height:8px;border-radius:50%;}
+  .chip.active{color:var(--bg-base);border-color:transparent;}
+  .chip[data-d="brandweer"].active{background:var(--brandweer);}
+  .chip[data-d="ambulance"].active{background:var(--ambulance);}
+  .chip[data-d="politie"].active{background:var(--politie);}
+  .chip[data-d="knrm"].active{background:var(--knrm);}
+  select, input[type=text]{
+    background:var(--bg-panel);border:1px solid var(--hairline);color:var(--text-primary);
+    font-family:var(--font-sans);font-size:13px;padding:7px 10px;border-radius:4px;
+  }
+  input[type=text]{min-width:200px;}
+  input[type=text]::placeholder{color:var(--text-muted);}
+
+  /* ---- main layout ---- */
+  main{flex:1;display:flex;min-height:0;}
+  #map{flex:1 1 60%;background:#0a0d11;}
+  .list-panel{
+    flex:1 1 40%;max-width:440px;min-width:320px;
+    border-left:1px solid var(--hairline);background:var(--bg-panel);
+    display:flex;flex-direction:column;min-height:0;
+  }
+  .list-panel .count{
+    padding:10px 16px;font-family:var(--font-mono);font-size:11px;color:var(--text-muted);
+    border-bottom:1px solid var(--hairline);letter-spacing:0.05em;text-transform:uppercase;
+  }
+  .list{overflow-y:auto;flex:1;}
+  .item{
+    padding:12px 16px;border-bottom:1px solid var(--hairline);
+    display:flex;gap:10px;cursor:pointer;transition:background .15s;
+  }
+  .item:hover{background:var(--bg-panel-2);}
+  .item .bar{width:4px;border-radius:2px;flex-shrink:0;}
+  .item .content{min-width:0;flex:1;}
+  .item .meta{display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:4px;}
+  .item .tekst{font-size:13px;line-height:1.4;color:var(--text-primary);word-wrap:break-word;}
+  .item .tag{
+    display:inline-block;font-size:10px;font-weight:600;padding:2px 6px;border-radius:3px;
+    margin-right:6px;letter-spacing:0.03em;text-transform:uppercase;font-family:var(--font-mono);
+  }
+  .empty-state{padding:40px 20px;text-align:center;color:var(--text-muted);font-size:13px;}
+
+  footer{
+    padding:8px 20px;border-top:1px solid var(--hairline);background:var(--bg-panel-2);
+    font-size:11px;color:var(--text-muted);flex-shrink:0;
+  }
+  a{color:var(--politie);}
+  ::-webkit-scrollbar{width:8px;}
+  ::-webkit-scrollbar-track{background:var(--bg-panel);}
+  ::-webkit-scrollbar-thumb{background:var(--hairline);border-radius:4px;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="ticker-wrap">
+    <div class="ticker-label">&#9679; LIVE</div>
+    <div class="ticker-track" id="ticker"><span>Verbinden met feed&hellip;</span></div>
+  </div>
+
+  <header>
+    <div class="brand">
+      <h1>112 Meldingen</h1>
+      <span class="sub">P2000 live dashboard</span>
+    </div>
+    <div class="status">
+      <span class="live-dot" id="liveDot"></span>
+      <span id="statusText">verbinden&hellip;</span>
+    </div>
+  </header>
+
+  <div class="filters">
+    <button class="chip active" data-d="brandweer"><span class="dot" style="background:var(--brandweer)"></span>Brandweer</button>
+    <button class="chip active" data-d="ambulance"><span class="dot" style="background:var(--ambulance)"></span>Ambulance</button>
+    <button class="chip active" data-d="politie"><span class="dot" style="background:var(--politie)"></span>Politie</button>
+    <button class="chip active" data-d="knrm"><span class="dot" style="background:var(--knrm)"></span>KNRM</button>
+    <select id="regioSelect"><option value="">Alle regio's</option></select>
+    <input type="text" id="zoekInput" placeholder="Zoek op plaats of tekst&hellip;" />
+  </div>
+
+  <main>
+    <div id="map"></div>
+    <div class="list-panel">
+      <div class="count" id="listCount">0 meldingen</div>
+      <div class="list" id="list"></div>
+    </div>
+  </main>
+
+  <footer>
+    Bron: P2000-netwerk (brandweer / ambulance / politie / KNRM) via feeds.livep2000.nl &middot;
+    Alleen voor persoonlijk gebruik &middot; locaties zijn benaderd op basis van plaatsnaam in het bericht
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  const API_BASE = ''; // zelfde origin als deze pagina (server.js serveert beide)
+
+  const state = {
+    disciplines: new Set(['brandweer','ambulance','politie','knrm']),
+    regio: '',
+    zoek: '',
+    meldingen: [],
+  };
+
+  const map = L.map('map', { zoomControl: true }).setView([52.2, 5.6], 7);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    subdomains: 'abcd', maxZoom: 19,
+  }).addTo(map);
+
+  let markers = L.layerGroup().addTo(map);
+
+  function fmtTijd(iso){
+    const d = new Date(iso);
+    return d.toLocaleTimeString('nl-NL', { hour:'2-digit', minute:'2-digit' });
+  }
+
+  function render(data){
+    // regio-select vullen (eenmalig)
+    const select = document.getElementById('regioSelect');
+    if (select.options.length <= 1 && data.regios){
+      data.regios.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.id; opt.textContent = r.naam;
+        select.appendChild(opt);
+      });
+    }
+
+    let items = data.meldingen.filter(m => state.disciplines.has(m.discipline));
+    if (state.regio) items = items.filter(m => String(m.regioId) === state.regio);
+    if (state.zoek) {
+      const q = state.zoek.toLowerCase();
+      items = items.filter(m => m.tekst.toLowerCase().includes(q) || (m.plaats||'').toLowerCase().includes(q));
+    }
+
+    document.getElementById('listCount').textContent = `${items.length} melding${items.length===1?'':'en'}`;
+
+    // lijst
+    const list = document.getElementById('list');
+    if (items.length === 0){
+      list.innerHTML = '<div class="empty-state">Geen meldingen die aan de filters voldoen.</div>';
+    } else {
+      list.innerHTML = items.slice(0, 200).map(m => `
+        <div class="item" data-lat="${m.lat}" data-lon="${m.lon}">
+          <div class="bar" style="background:${m.kleur}"></div>
+          <div class="content">
+            <div class="meta">
+              <span>${fmtTijd(m.tijd)} &middot; ${m.regioNaam}${m.plaats ? ' &middot; ' + m.plaats : ''}</span>
+              ${m.prioriteit ? `<span>${m.prioriteit}</span>` : ''}
+            </div>
+            <div>
+              <span class="tag" style="background:${m.kleur}22;color:${m.kleur}">${m.disciplineLabel}</span>
+            </div>
+            <div class="tekst">${m.tekst}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // kaart
+    markers.clearLayers();
+    items.forEach(m => {
+      const marker = L.circleMarker([m.lat, m.lon], {
+        radius: 7, color: m.kleur, fillColor: m.kleur, fillOpacity: 0.8, weight: 2,
+      }).bindPopup(`
+        <b>${m.disciplineLabel}</b>${m.prioriteit ? ' &middot; ' + m.prioriteit : ''}<br/>
+        ${fmtTijd(m.tijd)} &middot; ${m.plaats || m.regioNaam}<br/>
+        <span style="font-size:12px">${m.tekst}</span>
+      `);
+      markers.addLayer(marker);
+    });
+
+    // ticker: laatste 15 meldingen aaneengeregen
+    const tickerItems = data.meldingen.slice(0, 15);
+    const ticker = document.getElementById('ticker');
+    if (tickerItems.length){
+      ticker.innerHTML = tickerItems.map(m =>
+        `<span>${fmtTijd(m.tijd)} ${m.disciplineLabel.toUpperCase()} ${m.plaats ? m.plaats.toUpperCase()+' &mdash; ' : ''}${m.tekst}</span>`
+      ).join('');
+    }
+  }
+
+  async function ophalen(){
+    try {
+      const params = new URLSearchParams();
+      if (state.regio) params.set('regio', state.regio);
+      params.set('discipline', Array.from(state.disciplines).join(','));
+      if (state.zoek) params.set('zoek', state.zoek);
+
+      const res = await fetch(`${API_BASE}/api/meldingen?${params.toString()}`);
+      if (!res.ok) throw new Error('Serverfout: ' + res.status);
+      const data = await res.json();
+      render(data);
+      document.getElementById('statusText').textContent = 'live &middot; laatst bijgewerkt ' + fmtTijd(data.laatsteUpdate);
+      document.getElementById('liveDot').style.background = 'var(--ambulance)';
+    } catch(err){
+      document.getElementById('statusText').textContent = 'geen verbinding met backend';
+      document.getElementById('liveDot').style.background = 'var(--brandweer)';
+      console.error(err);
+    }
+  }
+
+  document.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const d = chip.dataset.d;
+      if (state.disciplines.has(d)) { state.disciplines.delete(d); chip.classList.remove('active'); }
+      else { state.disciplines.add(d); chip.classList.add('active'); }
+      ophalen();
+    });
+  });
+  document.getElementById('regioSelect').addEventListener('change', e => { state.regio = e.target.value; ophalen(); });
+  let zoekTimeout;
+  document.getElementById('zoekInput').addEventListener('input', e => {
+    clearTimeout(zoekTimeout);
+    zoekTimeout = setTimeout(() => { state.zoek = e.target.value; ophalen(); }, 250);
+  });
+
+  ophalen();
+  setInterval(ophalen, 15000);
+</script>
+</body>
+</html>
